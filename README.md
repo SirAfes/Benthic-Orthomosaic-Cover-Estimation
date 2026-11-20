@@ -1,4 +1,4 @@
-# Benthic Cover
+# Benthic Orthomosaic Cover Estimation
 
 Tools and protocol for estimating **unbiased percent cover** of benthic communities from
 underwater orthomosaics, starting from a small number of expert labels.
