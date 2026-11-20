@@ -62,6 +62,21 @@ python src/pipeline.py maps --grid out/tuesday/grid.npz --predictions out/tuesda
 ```
 Density cells are for visualisation; report mosaic-level cover from step 3.
 
+## 6. Object outlines (optional; needs torch, `sam2` and a checkpoint)
+```bash
+python src/pipeline.py objects --raster Tuesday.tif --grid out/tuesday/grid.npz \
+  --proba out/tuesday/model_r0/proba.npy --classes out/tuesday/model_r0/classes.json \
+  --object-classes "Corynactis viridis" --mm-per-px 0.412284 --origin X0 Y0 \
+  --min-area-cm2 10 --colour-json out/tuesday/features.npy.colour.json \
+  --sam2-config sam2.1_hiera_l.yaml --sam2-checkpoint sam2.1_hiera_large.pt --device cuda \
+  --out out/tuesday/objects_r0.geojson
+```
+SAM2 supplies the outline, the patch classifier supplies the identity (area-weighted vote over the
+patches under the mask).  Only object classes are outlined; matrix classes stay cover.
+Limits: `--margin-px` must exceed the largest organism radius, otherwise an organism larger than a
+tile is cut into pieces; outlines are not yet validated against the gold windows, and object counts
+are not design-based estimates (only cover in step 3 is).
+
 ## Status
 Unit and synthetic end-to-end tests pass (including a coverage simulation of the estimators).
 Not yet run on the real mosaics, with rasterio reading, or with the DINOv2 backbone.

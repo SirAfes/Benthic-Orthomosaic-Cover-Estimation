@@ -19,7 +19,8 @@ Status: pipeline implemented and tested on synthetic data; not yet run on the re
 | `src/tiling.py`, `src/colour.py`, `src/patch_features.py` | Fixed-physical-size patch grid, per-mosaic colour normalisation, resumable feature extraction. |
 | `src/classifier.py`, `src/estimation.py` | Patch classifier with reject option; design-based cover estimators (post-stratified primary, PPI, direct) with intervals. |
 | `src/active_learning.py`, `src/cover_maps.py` | Next-label suggestions that respect the reference sample; density cells and object components. |
-| `src/pipeline.py` | CLI: `grid`, `features`, `train`, `estimate`, `suggest`, `maps`. |
+| `src/objects.py` | Outlines of discrete organisms: SAM2 candidate masks, class by patch-probability vote, minimum mapping unit, non-maximum suppression, GeoJSON polygons. |
+| `src/pipeline.py` | CLI: `grid`, `features`, `train`, `estimate`, `suggest`, `maps`, `objects`. |
 | `docs/WORKFLOW.md` | Step-by-step commands. |
 | `tests/` | Unit, simulation (estimator coverage) and synthetic end-to-end tests. |
 

@@ -6,6 +6,7 @@
     python src/pipeline.py estimate ...   design-based cover estimates with intervals
     python src/pipeline.py suggest  ...   next patches to label (training only)
     python src/pipeline.py maps     ...   density grid and object components
+    python src/pipeline.py objects  ...   SAM2 outlines of discrete organisms, classified by patch vote
 
 Geometry options are shared: either ``--raster`` (needs rasterio) or ``--mask-png`` with
 ``--full-size`` and ``--origin`` (see reference_sampling.py), plus ``--mm-per-px``.
@@ -30,6 +31,7 @@ import colour  # noqa: E402
 import cover_maps as cm  # noqa: E402
 import estimation as est  # noqa: E402
 import features as ft  # noqa: E402
+import objects as ob  # noqa: E402
 import patch_features as pf  # noqa: E402
 import reference_sampling as rs  # noqa: E402
 import tiling  # noqa: E402
@@ -37,6 +39,13 @@ import tiling  # noqa: E402
 
 def open_reader(path: str):
     return tiling.RasterioReader(path)
+
+
+def open_generator(a):
+    """Mask generator for ``objects`` (SAM2).  Replaced in tests; needs torch + sam2 + a checkpoint."""
+    if not (a.sam2_config and a.sam2_checkpoint):
+        raise SystemExit("objects needs --sam2-config and --sam2-checkpoint")
+    return ob.load_sam2_generator(a.sam2_config, a.sam2_checkpoint, a.device)
 
 
 def add_geometry(ap: argparse.ArgumentParser) -> None:
@@ -260,6 +269,32 @@ def cmd_maps(a):
     print(f"density cells -> {a.out}/density_cells.csv; components for {a.object_classes or []}")
 
 
+def cmd_objects(a):
+    g = tiling.Grid.load(a.grid)
+    proba = np.load(a.proba)
+    with open(a.classes) as fh:
+        classes = json.load(fh)
+    unknown = sorted(set(a.object_classes) - set(classes))
+    if unknown:
+        raise SystemExit(f"object classes not in the model: {unknown}")
+    norm = None
+    if a.colour_json:
+        with open(a.colour_json) as fh:
+            norm = colour.ColourNormaliser.from_json(fh.read())
+    reader = open_reader(a.raster)
+    mmu_px = int(round(a.min_area_cm2 * 100.0 / a.mm_per_px ** 2))
+    objs = ob.delineate_mosaic(reader, g, proba, classes, a.object_classes, open_generator(a),
+                               tile_px=a.tile_px, margin_px=a.margin_px, normaliser=norm,
+                               mmu_px=mmu_px, min_conf=a.min_conf)
+    tr = rs.AffineXY(a.origin[0], a.origin[1], a.mm_per_px / 1000.0) if a.origin else None
+    fc = ob.to_geojson(objs, a.mm_per_px / 1000.0, tr)
+    os.makedirs(os.path.dirname(os.path.abspath(a.out)), exist_ok=True)
+    with open(a.out, "w") as fh:
+        json.dump(fc, fh)
+    counts = {c: sum(o["class"] == c for o in objs) for c in a.object_classes}
+    print(f"{len(objs)} objects {counts} -> {a.out} (coordinates: {'world' if tr else 'pixels'})")
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -332,6 +367,25 @@ def build_parser() -> argparse.ArgumentParser:
     m.add_argument("--origin", type=float, nargs=2)
     m.add_argument("--out", required=True)
     m.set_defaults(fn=cmd_maps)
+
+    o = sub.add_parser("objects")
+    o.add_argument("--raster", required=True)
+    o.add_argument("--grid", required=True)
+    o.add_argument("--proba", required=True)
+    o.add_argument("--classes", required=True)
+    o.add_argument("--object-classes", nargs="+", required=True, help="classes that are discrete organisms")
+    o.add_argument("--mm-per-px", type=float, required=True)
+    o.add_argument("--origin", type=float, nargs=2)
+    o.add_argument("--min-area-cm2", type=float, default=10.0, help="minimum mapping unit")
+    o.add_argument("--min-conf", type=float, default=0.5)
+    o.add_argument("--tile-px", type=int, default=1024)
+    o.add_argument("--margin-px", type=int, default=128, help="must exceed the largest organism radius")
+    o.add_argument("--colour-json", help="features .npy.colour.json, to give SAM2 the same normalised colours")
+    o.add_argument("--sam2-config")
+    o.add_argument("--sam2-checkpoint")
+    o.add_argument("--device", default="cpu")
+    o.add_argument("--out", required=True, help="GeoJSON")
+    o.set_defaults(fn=cmd_objects)
     return ap
 
 

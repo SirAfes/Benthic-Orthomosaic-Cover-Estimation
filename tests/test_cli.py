@@ -105,3 +105,41 @@ def test_cli_end_to_end(tmp_path, monkeypatch):
     pipeline.main(["maps", "--grid", grid_path, "--predictions", preds, "--cell-patches", "6",
                    "--min-patches", "10", "--object-classes", "sponge", *GEO, "--out", maps_dir])
     assert read_csv(os.path.join(maps_dir, "density_cells.csv")) and read_csv(os.path.join(maps_dir, "components.csv"))
+
+
+def test_cli_objects_outlines_only_object_classes_and_georeferences(tmp_path, monkeypatch):
+    from scipy import ndimage
+
+    img, truth = synthetic_survey()
+    monkeypatch.setattr(pipeline, "open_reader", lambda path: tiling.ArrayReader(img))
+
+    def orange_generator(win):                                  # stand-in for SAM2: smoothed orange blobs
+        rgb = win[..., :3].astype(float)
+        score = ndimage.uniform_filter(rgb[..., 0] - rgb[..., 2], 9)
+        lab, n = ndimage.label(score > 110)
+        return [{"segmentation": lab == k, "stability_score": 0.9, "predicted_iou": 0.9} for k in range(1, n + 1)]
+
+    monkeypatch.setattr(pipeline, "open_generator", lambda a: orange_generator)
+
+    g = tiling.make_grid((img[..., 3] > 0)[::4, ::4], (4.0, 4.0), 720, 480, 16)
+    c = g.centers
+    t = truth[c[:, 1].astype(int), c[:, 0].astype(int)]
+    proba = np.full((g.n, 3), 0.025)
+    proba[np.arange(g.n), t] = 0.95
+    grid_path, proba_path, classes_path = (str(tmp_path / n) for n in ("grid.npz", "proba.npy", "classes.json"))
+    g.save(grid_path)
+    np.save(proba_path, proba)
+    json.dump(NAMES, open(classes_path, "w"))
+
+    out = str(tmp_path / "objects.geojson")
+    pipeline.main(["objects", "--raster", "x.tif", "--grid", grid_path, "--proba", proba_path,
+                   "--classes", classes_path, "--object-classes", "sponge", "--mm-per-px", "1.0",
+                   "--origin", "100", "200", "--min-area-cm2", "20", "--out", out])
+    fc = json.load(open(out))
+    feats = fc["features"]
+    assert len(feats) == 2 and {f["properties"]["class"] for f in feats} == {"sponge"}
+    true_m2 = float(((truth == 2) & (img[..., 3] > 0)).sum()) * 1e-6
+    got_m2 = sum(f["properties"]["area_m2"] for f in feats)
+    assert abs(got_m2 - true_m2) / true_m2 < 0.10
+    xy = np.array([p for f in feats for p in f["geometry"]["coordinates"][0]])
+    assert xy[:, 0].min() >= 100 and xy[:, 0].max() <= 100.72 and xy[:, 1].max() <= 200 and xy[:, 1].min() >= 199.52
