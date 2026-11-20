@@ -1,0 +1,43 @@
+raw_folder,n_crops,n_source_photos,canonical_label,morphotype_group,layer,note
+Achinothoe sphyrodeta (Closed),2,1,Actinothoe sphyrodeta,Anthozoa - anemone,B,typo + closed-state variant; keep a 'closed' attribute
+Actinothoe sphyrodeta,11,2,Actinothoe sphyrodeta,Anthozoa - anemone,B,
+Alcyonium digitatum,1,1,Alcyonium digitatum,Anthozoa - soft coral,B,1 crop only
+Antedon bifida,9,2,Antedon bifida,Echinoderm - crinoid,B,mobile-ish; decide if counted in cover
+Asterias rubens,2,1,Asterias rubens,Echinoderm - mobile,B-mobile,mobile: exclude from cover or report separately
+Botryllus Schlosseri,1,1,Botryllus schlosseri,Ascidian - colonial,B,typo in species epithet case
+Bryozoa sp,1,1,Bryozoa sp,Bryozoa - unresolved,B,
+Caryophyllia (Caryophyllia) smithii,3,1,Caryophyllia smithii,Anthozoa - cup coral,B,merge with next row; includes a 100 px crop
+Caryophyllia smithii,25,4,Caryophyllia smithii,Anthozoa - cup coral,B,
+Cliona celata,1,1,Cliona celata,Sponge - boring/encrusting,B,
+Coralline crust,3,1,Coralline crust,Coralline crust,A,matrix class; includes a 3x3 px junk crop in 'Coralline crusts'
+Coralline crusts,6,2,Coralline crust,Coralline crust,A,merge with previous row
+Corynactis viridis,70,7,Corynactis viridis,Anthozoa - corallimorph,A/B,forms mats: label as cover class AND as individuals
+Crisia bryozoans,7,1,Crisia,Bryozoa - erect/turf,A/B,three folders for one taxon
+Crisia eburnea,10,3,Crisia,Bryozoa - erect/turf,A/B,merge
+Crisia sp,6,2,Crisia,Bryozoa - erect/turf,A/B,merge
+Dendrodoa grossularia,7,2,Dendrodoa grossularia,Ascidian - solitary/aggregated,B,
+Echinus esculentus,1,1,Echinus esculentus,Echinoderm - mobile,B-mobile,mobile
+Haliclona (Reniera) cinerea,4,1,Haliclona cinerea,Sponge - encrusting,B,
+Haliclona viscosa,12,3,Haliclona viscosa,Sponge - encrusting,B,
+Hinia incrassata,2,1,Hinia incrassata,Mollusc - gastropod,B-mobile,mobile
+Holothuria forskali,2,2,Holothuria forskali,Echinoderm - mobile,B-mobile,mobile
+Kallymenia reniformis,3,1,Kallymenia reniformis,Algae - foliose red,A,matrix/seaweed class
+Lissoclinum perforatum,9,2,Lissoclinum perforatum,Ascidian - colonial,B,
+Myxilla rosacea,2,1,Myxilla rosacea,Sponge - encrusting,B,
+Ophiactis balli,2,1,Ophiactis balli,Echinoderm - mobile,B-mobile,mobile
+Pachymatisma johnstonia,1,1,Pachymatisma johnstonia,Sponge - massive,B,
+Pentapora foliacea,18,4,Pentapora foliacea,Bryozoa - erect foliose,B,
+Phrynorhombus norvegicus (A well camouflaged flat fish),1,1,Phrynorhombus norvegicus,Fish,exclude,mobile fish: exclude from cover
+Polymastia boletiformis,2,1,Polymastia boletiformis,Sponge - massive,B,
+Serpula vermicularis,1,1,Serpula vermicularis,Polychaete - tube worm,B,
+Spirobranchus triqueter,18,2,Spirobranchus triqueter,Polychaete - tube worm,B,merge with misspelled folder
+Spirodbranchus triqueter,16,1,Spirobranchus triqueter,Polychaete - tube worm,B,typo in folder name
+Steromphala cineraria,5,1,Steromphala cineraria,Mollusc - gastropod,B-mobile,mobile
+Tethya citrina,3,3,Tethya citrina,Sponge - massive,B,
+Thymosia guernei,3,1,Thymosia guernei,Sponge - encrusting,B,check spelling of genus/species
+Tubullaria indivisa,3,1,Tubularia indivisa,Hydroid,B,typo in folder name
+(none),0,0,Bare rock / turf / biofilm,Substrate,A,dominant turquoise-grey surface in Tuesday mosaic; needs mosaic labels
+(none),0,0,Sand,Substrate,A,small beige patch at the left end of Tuesday
+(none),0,0,Foliose red algae (dark),Algae - foliose red,A,large dark bordeaux stands; Kallymenia may be part of this
+(none),0,0,Orange encrusting mat,Sponge/anthozoa unresolved,A,large orange patches; identity to be decided by the expert
+(none),0,0,Unscorable (seam/hole/artefact),Artefact,exclude,"points landing here are recorded as unscorable, not dropped silently"
