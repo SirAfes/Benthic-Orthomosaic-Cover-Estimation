@@ -3,7 +3,7 @@
 Tools and protocol for estimating **unbiased percent cover** of benthic communities from
 underwater orthomosaics, starting from a small number of expert labels.
 
-Status: early work in progress (reference-sample design and crop-library baseline). No mosaic model yet.
+Status: pipeline implemented and tested on synthetic data; not yet run on the real mosaics.
 
 ## What is here
 
@@ -16,7 +16,12 @@ Status: early work in progress (reference-sample design and crop-library baselin
 | `src/crop_library.py`, `src/crop_eval.py` | Crop library to canonical labels; leave-one-source-photo-out evaluation with cluster-bootstrap CIs. |
 | `scripts/extract_crop_features.py` | Feature extraction for a crop folder tree (numpy + Pillow). |
 | `docs/BASELINE_CROPS.md` | First baseline result on the crop library. |
-| `tests/` | Unit tests. |
+| `src/tiling.py`, `src/colour.py`, `src/patch_features.py` | Fixed-physical-size patch grid, per-mosaic colour normalisation, resumable feature extraction. |
+| `src/classifier.py`, `src/estimation.py` | Patch classifier with reject option; design-based cover estimators (post-stratified primary, PPI, direct) with intervals. |
+| `src/active_learning.py`, `src/cover_maps.py` | Next-label suggestions that respect the reference sample; density cells and object components. |
+| `src/pipeline.py` | CLI: `grid`, `features`, `train`, `estimate`, `suggest`, `maps`. |
+| `docs/WORKFLOW.md` | Step-by-step commands. |
+| `tests/` | Unit, simulation (estimator coverage) and synthetic end-to-end tests. |
 
 ## Design principles
 

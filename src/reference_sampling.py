@@ -43,6 +43,14 @@ def erode(mask: np.ndarray, radius_cells: int) -> np.ndarray:
     return out
 
 
+def eroded_mask(mask_low: np.ndarray, scale_xy: tuple[float, float], mm_per_px: float,
+                edge_buffer_mm: float) -> np.ndarray:
+    """The sampling population: valid area minus an edge band.  Used by BOTH the sampler and
+    the estimator so that they refer to exactly the same population."""
+    cells = int(np.ceil(edge_buffer_mm / mm_per_px / max(scale_xy)))
+    return erode(mask_low, cells)
+
+
 def draw_points(
     mask_low: np.ndarray,
     scale_xy: tuple[float, float],
@@ -187,8 +195,7 @@ def main(argv=None) -> int:
         transform = AffineXY(args.origin[0], args.origin[1], args.mm_per_px / 1000.0)
     else:
         mask, (sx, sy), transform, (W, H) = read_mask_rasterio(args.raster)
-    buf_cells = int(np.ceil(args.edge_buffer_mm / args.mm_per_px / max(sx, sy)))
-    eroded = erode(mask, buf_cells)
+    eroded = eroded_mask(mask, (sx, sy), args.mm_per_px, args.edge_buffer_mm)
     pts = draw_points(eroded, (sx, sy), args.n_points, args.seed)
     win_px = int(round(args.window_cm * 10.0 / args.mm_per_px))
     wins = draw_windows(eroded, (sx, sy), win_px, args.n_windows, args.seed + 1)

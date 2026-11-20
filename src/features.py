@@ -106,11 +106,33 @@ class TorchBackbone:
         self._mean = torch.tensor([0.485, 0.456, 0.406], device=device).view(1, 3, 1, 1)
         self._std = torch.tensor([0.229, 0.224, 0.225], device=device).view(1, 3, 1, 1)
 
-    def __call__(self, img: np.ndarray) -> np.ndarray:
+    def batch(self, imgs) -> np.ndarray:
         torch = self._torch
-        t = torch.from_numpy(np.ascontiguousarray(img)).to(self.device).permute(2, 0, 1)[None].float() / 255.0
-        t = torch.nn.functional.interpolate(t, size=(self.size, self.size), mode="bilinear", align_corners=False)
-        t = (t - self._mean) / self._std
+        ts = []
+        for img in imgs:
+            t = torch.from_numpy(np.ascontiguousarray(img)).to(self.device).permute(2, 0, 1)[None].float() / 255.0
+            ts.append(torch.nn.functional.interpolate(t, size=(self.size, self.size), mode="bilinear",
+                                                      align_corners=False))
+        x = (torch.cat(ts) - self._mean) / self._std
         with torch.no_grad():
-            out = self.model(t)
-        return out.reshape(-1).cpu().numpy().astype(np.float32)
+            out = self.model(x)
+        return out.reshape(len(imgs), -1).cpu().numpy().astype(np.float32)
+
+    def __call__(self, img: np.ndarray) -> np.ndarray:
+        return self.batch([img])[0]
+
+
+def load_backbone(name: str, device: str = "cpu"):
+    """``color`` (baseline) or a DINOv2 hub name such as ``dinov2_vits14``.
+
+    DINOv2 is loaded with torch.hub (``facebookresearch/dinov2``), which needs network access
+    and ``torch`` on the machine that runs it.  Outputs the CLS embedding.
+    """
+    if name == "color":
+        return ColorTextureFeatures()
+    if name.startswith("dinov2"):
+        import torch  # lazy
+
+        model = torch.hub.load("facebookresearch/dinov2", name)
+        return TorchBackbone(model, device=device, size=224)
+    raise ValueError(f"Unknown backbone {name!r}")
