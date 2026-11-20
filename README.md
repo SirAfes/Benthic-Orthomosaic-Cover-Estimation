@@ -3,7 +3,7 @@
 Tools and protocol for estimating **unbiased percent cover** of benthic communities from
 underwater orthomosaics, starting from a small number of expert labels.
 
-Status: early work in progress (protocol + reference-sample design). No model code yet.
+Status: early work in progress (reference-sample design and crop-library baseline). No mosaic model yet.
 
 ## What is here
 
@@ -12,7 +12,11 @@ Status: early work in progress (protocol + reference-sample design). No model co
 | `src/reference_sampling.py` | Draws a seeded simple-random reference sample (points + dense "gold" windows) over the valid area of a mosaic, before any model exists. |
 | `docs/label_schema_v1_draft.csv` | Draft mapping from raw crop folders to a merged, two-layer label schema (A = matrix/cover classes, B = discrete organisms). |
 | `docs/LABELLING_PROTOCOL.md` | Blind labelling protocol for the reference sample. |
-| `tests/` | Unit tests (numpy + Pillow only). |
+| `src/features.py` | Baseline colour/texture features (numpy only) and the interface for learned backbone features. |
+| `src/crop_library.py`, `src/crop_eval.py` | Crop library to canonical labels; leave-one-source-photo-out evaluation with cluster-bootstrap CIs. |
+| `scripts/extract_crop_features.py` | Feature extraction for a crop folder tree (numpy + Pillow). |
+| `docs/BASELINE_CROPS.md` | First baseline result on the crop library. |
+| `tests/` | Unit tests. |
 
 ## Design principles
 
