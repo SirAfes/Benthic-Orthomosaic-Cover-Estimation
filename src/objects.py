@@ -107,6 +107,37 @@ def vote_class(mask: np.ndarray, x_off: int, y_off: int, grid, proba: np.ndarray
     return str(classes[j]), float(p[j]), p
 
 
+def finalize_candidates(cands: list, shape: tuple, x_off: int, y_off: int, core: tuple,
+                        max_overlap: float = 0.5, simplify_tol: float = 1.5, keep_mask: bool = False) -> list:
+    """Greedy NMS, tile-core ownership and outlines for ``(score, mask, class, confidence)`` candidates.
+
+    Shared by every source of masks.  A mask owned by a neighbouring tile still blocks duplicates here
+    (it is marked occupied before the core test).  With ``keep_mask`` each result also carries ``mask``
+    (the kept piece, in window coordinates) for callers that need pixel coverage.
+    """
+    occupied = np.zeros(shape, dtype=bool)
+    cx0, cy0, cx1, cy1 = core
+    out = []
+    for _, seg, cls, conf in sorted(cands, key=lambda t: -t[0]):
+        if (seg & occupied).sum() > max_overlap * int(seg.sum()):
+            continue
+        occupied |= seg
+        ys, xs = np.nonzero(seg)
+        cx, cy = xs.mean() + x_off, ys.mean() + y_off
+        if not (cx0 <= cx < cx1 and cy0 <= cy < cy1):
+            continue
+        lab, n = ndimage.label(seg)
+        if n > 1:
+            seg = lab == (1 + int(np.argmax(ndimage.sum(seg, lab, range(1, n + 1)))))
+        ring = simplify(trace_outer_boundary(seg), simplify_tol) + np.array([x_off, y_off], dtype=float)
+        rec = {"class": cls, "confidence": conf, "n_pixels": int(seg.sum()),
+               "ring_px": ring, "centroid_px": (float(cx), float(cy))}
+        if keep_mask:
+            rec["mask"] = seg
+        out.append(rec)
+    return out
+
+
 def delineate_tile(img_rgb: np.ndarray, x_off: int, y_off: int, core: tuple, generator: Callable,
                    grid, proba: np.ndarray, classes, object_classes, mmu_px: int,
                    min_conf: float = 0.5, max_overlap: float = 0.5, simplify_tol: float = 1.5) -> list:
@@ -120,27 +151,8 @@ def delineate_tile(img_rgb: np.ndarray, x_off: int, y_off: int, core: tuple, gen
         if v is None or v[0] not in object_classes or v[1] < min_conf:
             continue
         score = v[1] * float(m.get("stability_score", 1.0)) * float(m.get("predicted_iou", 1.0))
-        cands.append((score, seg, v))
-    cands.sort(key=lambda t: -t[0])
-
-    occupied = np.zeros(img_rgb.shape[:2], dtype=bool)
-    cx0, cy0, cx1, cy1 = core
-    out = []
-    for _, seg, (cls, conf, _) in cands:
-        if (seg & occupied).sum() > max_overlap * int(seg.sum()):
-            continue
-        occupied |= seg                              # also blocks duplicates of objects owned by a neighbour tile
-        ys, xs = np.nonzero(seg)
-        cx, cy = xs.mean() + x_off, ys.mean() + y_off
-        if not (cx0 <= cx < cx1 and cy0 <= cy < cy1):
-            continue
-        lab, n = ndimage.label(seg)
-        if n > 1:
-            seg = lab == (1 + int(np.argmax(ndimage.sum(seg, lab, range(1, n + 1)))))
-        ring = simplify(trace_outer_boundary(seg), simplify_tol) + np.array([x_off, y_off], dtype=float)
-        out.append({"class": cls, "confidence": conf, "n_pixels": int(seg.sum()),
-                    "ring_px": ring, "centroid_px": (float(cx), float(cy))})
-    return out
+        cands.append((score, seg, v[0], v[1]))
+    return finalize_candidates(cands, img_rgb.shape[:2], x_off, y_off, core, max_overlap, simplify_tol)
 
 
 def delineate_mosaic(reader, grid, proba, classes, object_classes, generator, tile_px: int = 1024,

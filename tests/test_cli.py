@@ -143,3 +143,57 @@ def test_cli_objects_outlines_only_object_classes_and_georeferences(tmp_path, mo
     assert abs(got_m2 - true_m2) / true_m2 < 0.10
     xy = np.array([p for f in feats for p in f["geometry"]["coordinates"][0]])
     assert xy[:, 0].min() >= 100 and xy[:, 0].max() <= 100.72 and xy[:, 1].max() <= 200 and xy[:, 1].min() >= 199.52
+
+
+def test_cli_detect_feeds_estimate_and_recovers_true_cover(tmp_path, monkeypatch):
+    from scipy import ndimage
+
+    img, truth = synthetic_survey()
+    monkeypatch.setattr(pipeline, "open_reader", lambda path: tiling.ArrayReader(img))
+
+    def sponge_detector(win):                                   # stand-in for YOLO-seg / Grounding DINO
+        rgb = win[..., :3].astype(float)
+        lab, n = ndimage.label(ndimage.uniform_filter(rgb[..., 0] - rgb[..., 2], 9) > 110)
+        return [{"segmentation": lab == k, "class": "sponge", "score": 0.8} for k in range(1, n + 1)]
+
+    monkeypatch.setattr(pipeline, "open_detector", lambda a: sponge_detector)
+    f = 4
+    low = (img[..., 3] > 0)[::f, ::f]
+    mask_png = str(tmp_path / "mask.png")
+    Image.fromarray((low * 255).astype("uint8")).save(mask_png)
+    mg = ["--mask-png", mask_png] + MASKGEO
+
+    ref_dir = str(tmp_path / "ref")
+    assert rs.main(["--raster", "x.tif", "--mask-png", mask_png, "--full-size", "720", "480", "--origin", "0", "0",
+                    "--mm-per-px", "1.0", "--seed", "5", "--n-points", "400", "--n-windows", "2",
+                    "--window-cm", "6", "--edge-buffer-mm", "12", "--out", ref_dir]) == 0
+    lab_path = str(tmp_path / "ref_labelled.csv")
+    with open(lab_path, "w", newline="") as fh:
+        wr = csv.writer(fh)
+        wr.writerow(["id", "x_px", "y_px", "label"])
+        for r in read_csv(os.path.join(ref_dir, "reference_points.csv")):
+            wr.writerow([r["id"], r["x_px"], r["y_px"],
+                         "sponge" if truth[int(float(r["y_px"])), int(float(r["x_px"]))] == 2 else "other"])
+
+    grid_path = str(tmp_path / "grid.npz")
+    pipeline.main(["grid", *mg, *GEO, "--patch-cm", "1.6", "--out", grid_path])
+    g = tiling.Grid.load(grid_path)
+    det_dir = str(tmp_path / "det")
+    pipeline.main(["detect", "--raster", "x.tif", "--grid", grid_path, *GEO, "--origin", "0", "0",
+                   "--min-area-cm2", "20", "--out", det_dir])
+    assert len(json.load(open(os.path.join(det_dir, "instances.geojson")))["features"]) == 2
+    preds = os.path.join(det_dir, "patch_predictions.csv")
+    labels = [r["label"] for r in read_csv(preds)]
+    assert len(labels) == g.n and set(labels) == {"sponge", "other"}
+    rep = json.load(open(os.path.join(det_dir, "detect_report.json")))
+    assert rep["instances_per_class"] == {"sponge": 2}
+
+    est_dir = str(tmp_path / "est")
+    pipeline.main(["estimate", *mg, *GEO, "--grid", grid_path, "--predictions", preds, "--reference", lab_path,
+                   "--edge-buffer-mm", "12", "--out", est_dir])
+    table = {r["class"]: r for r in read_csv(os.path.join(est_dir, "cover_estimates.csv"))}
+    pop_low = rs.eroded_mask(low, (float(f), float(f)), 1.0, 12)
+    pop_px = np.kron(pop_low, np.ones((f, f), dtype=bool))[:480, :720]
+    true_share = float((truth[pop_px] == 2).mean())
+    assert abs(float(table["sponge"]["post_p"]) - true_share) < 0.07
+    assert float(table["sponge"]["post_lo95"]) <= true_share <= float(table["sponge"]["post_hi95"]) + 0.02

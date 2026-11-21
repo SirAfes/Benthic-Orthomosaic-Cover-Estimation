@@ -7,6 +7,7 @@
     python src/pipeline.py suggest  ...   next patches to label (training only)
     python src/pipeline.py maps     ...   density grid and object components
     python src/pipeline.py objects  ...   SAM2 outlines of discrete organisms, classified by patch vote
+    python src/pipeline.py detect   ...   YOLO-seg / Grounding DINO + SAM2 instances -> patch map for `estimate`
 
 Geometry options are shared: either ``--raster`` (needs rasterio) or ``--mask-png`` with
 ``--full-size`` and ``--origin`` (see reference_sampling.py), plus ``--mm-per-px``.
@@ -29,6 +30,7 @@ import active_learning as al  # noqa: E402
 import classifier as clf  # noqa: E402
 import colour  # noqa: E402
 import cover_maps as cm  # noqa: E402
+import detection as det  # noqa: E402
 import estimation as est  # noqa: E402
 import features as ft  # noqa: E402
 import objects as ob  # noqa: E402
@@ -46,6 +48,20 @@ def open_generator(a):
     if not (a.sam2_config and a.sam2_checkpoint):
         raise SystemExit("objects needs --sam2-config and --sam2-checkpoint")
     return ob.load_sam2_generator(a.sam2_config, a.sam2_checkpoint, a.device)
+
+
+def open_detector(a):
+    """Detector for ``detect``.  Replaced in tests; the backends need torch and model weights."""
+    import detectors
+
+    if a.backend == "yolo":
+        if not a.weights:
+            raise SystemExit("--backend yolo needs --weights")
+        return detectors.load_yolo_seg(a.weights, a.device, a.min_score, a.imgsz)
+    prompts = dict(p.split("=", 1) for p in a.prompt or [])
+    if not (prompts and a.sam2_config and a.sam2_checkpoint):
+        raise SystemExit("--backend grounded needs --prompt CLASS=phrase, --sam2-config and --sam2-checkpoint")
+    return detectors.load_grounded_sam(prompts, a.sam2_config, a.sam2_checkpoint, a.device)
 
 
 def add_geometry(ap: argparse.ArgumentParser) -> None:
@@ -295,6 +311,45 @@ def cmd_objects(a):
     print(f"{len(objs)} objects {counts} -> {a.out} (coordinates: {'world' if tr else 'pixels'})")
 
 
+def cmd_detect(a):
+    g = tiling.Grid.load(a.grid)
+    norm = None
+    if a.colour_json:
+        with open(a.colour_json) as fh:
+            norm = colour.ColourNormaliser.from_json(fh.read())
+    reader = open_reader(a.raster)
+    mmu_px = int(round(a.min_area_cm2 * 100.0 / a.mm_per_px ** 2))
+
+    def progress(done, total):
+        print(f"\rtile {done}/{total}", end="", flush=True)
+
+    insts = det.detect_mosaic(reader, g, open_detector(a), tile_px=a.tile_px, margin_px=a.margin_px,
+                              normaliser=norm, mmu_px=mmu_px, min_score=a.min_score,
+                              classes_keep=set(a.classes) if a.classes else None, progress=progress)
+    print()
+    labels, conf = det.patch_labels(g, insts, other=a.other_label, min_cover=a.min_cover)
+    tr = rs.AffineXY(a.origin[0], a.origin[1], a.mm_per_px / 1000.0) if a.origin else None
+    os.makedirs(a.out, exist_ok=True)
+    with open(os.path.join(a.out, "instances.geojson"), "w") as fh:
+        json.dump(ob.to_geojson(insts, a.mm_per_px / 1000.0, tr), fh)
+    ctr = g.centers
+    w = world(tr, ctr)
+    with open(os.path.join(a.out, "patch_predictions.csv"), "w", newline="") as fh:
+        wr = csv.writer(fh)
+        wr.writerow(["patch", "x0", "y0", "x_px", "y_px", "x_m", "y_m", "label", "confidence"])
+        for i in range(g.n):
+            wr.writerow([i, g.x0[i], g.y0[i], f"{ctr[i, 0]:.1f}", f"{ctr[i, 1]:.1f}", w[i][0], w[i][1],
+                         labels[i], f"{conf[i]:.4f}"])
+    per_class = {c: sum(i["class"] == c for i in insts) for c in sorted({i["class"] for i in insts})}
+    rep = {"backend": a.backend, "instances_per_class": per_class,
+           "patches_per_label": {str(k): int((labels == k).sum()) for k in sorted(set(labels))},
+           "min_score": a.min_score, "min_cover": a.min_cover, "min_area_cm2": a.min_area_cm2,
+           "note": "Labels come from detections only; cover is estimated by `estimate` from the reference sample."}
+    with open(os.path.join(a.out, "detect_report.json"), "w") as fh:
+        json.dump(rep, fh, indent=2)
+    print(json.dumps(rep, indent=2))
+
+
 def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     sub = ap.add_subparsers(dest="cmd", required=True)
@@ -386,6 +441,29 @@ def build_parser() -> argparse.ArgumentParser:
     o.add_argument("--device", default="cpu")
     o.add_argument("--out", required=True, help="GeoJSON")
     o.set_defaults(fn=cmd_objects)
+
+    d = sub.add_parser("detect")
+    d.add_argument("--raster", required=True)
+    d.add_argument("--grid", required=True)
+    d.add_argument("--backend", choices=["yolo", "grounded"], default="yolo")
+    d.add_argument("--weights", help="YOLO-seg weights (.pt)")
+    d.add_argument("--prompt", action="append", metavar="CLASS=PHRASE", help="grounded backend, repeatable")
+    d.add_argument("--sam2-config")
+    d.add_argument("--sam2-checkpoint")
+    d.add_argument("--classes", nargs="*", help="keep only these detected classes (default: all)")
+    d.add_argument("--other-label", default="other")
+    d.add_argument("--mm-per-px", type=float, required=True)
+    d.add_argument("--origin", type=float, nargs=2)
+    d.add_argument("--min-area-cm2", type=float, default=10.0)
+    d.add_argument("--min-score", type=float, default=0.25)
+    d.add_argument("--min-cover", type=float, default=0.3, help="share of a patch an instance must cover")
+    d.add_argument("--tile-px", type=int, default=1024)
+    d.add_argument("--margin-px", type=int, default=128)
+    d.add_argument("--imgsz", type=int, default=1024)
+    d.add_argument("--colour-json")
+    d.add_argument("--device", default="cpu")
+    d.add_argument("--out", required=True, help="output directory")
+    d.set_defaults(fn=cmd_detect)
     return ap
 
 
