@@ -169,7 +169,7 @@ def read_mask_png(path: str):
     return np.array(Image.open(path)) > 0
 
 
-def main(argv=None) -> int:
+def build_parser() -> argparse.ArgumentParser:
     ap = argparse.ArgumentParser(description=__doc__.split("\n")[0])
     ap.add_argument("--raster", required=True, help="Raster name (or path when no --mask-png).")
     ap.add_argument("--mask-png", help="Use this validity mask instead of reading the raster.")
@@ -184,6 +184,11 @@ def main(argv=None) -> int:
     ap.add_argument("--n-windows", type=int, default=5)
     ap.add_argument("--window-cm", type=float, default=50.0)
     ap.add_argument("--out", required=True)
+    return ap
+
+
+def main(argv=None) -> int:
+    ap = build_parser()
     args = ap.parse_args(argv)
 
     if args.mask_png:

@@ -24,11 +24,16 @@ jobs:
         run: |
           pyinstaller --onefile --name benthic-cover --paths src --collect-all rasterio --hidden-import joblib src/pipeline.py
           pyinstaller --onefile --name benthic-reference-sample --paths src --collect-all rasterio src/reference_sampling.py
+          pyinstaller --onefile --windowed --name benthic-cover-gui --paths src --collect-all rasterio --hidden-import joblib src/gui.py
       - name: Smoke test
         run: |
-          dist\benthic-cover.exe --help
-          dist\benthic-cover.exe objects --help
-          dist\benthic-reference-sample.exe --help
+          function Check($what) { if ($LASTEXITCODE -ne 0) { throw "$what failed with exit code $LASTEXITCODE" } }
+          dist\benthic-cover.exe --help; Check "benthic-cover --help"
+          dist\benthic-cover.exe detect --help; Check "benthic-cover detect --help"
+          dist\benthic-reference-sample.exe --help; Check "benthic-reference-sample --help"
+          python src/gui.py --selftest; Check "python gui selftest"
+          $p = Start-Process dist\benthic-cover-gui.exe -ArgumentList "--selftest" -Wait -PassThru
+          if ($p.ExitCode -ne 0) { throw "GUI exe selftest failed with exit code $($p.ExitCode)" }
       - uses: actions/upload-artifact@v4
         with:
           name: benthic-windows-exe

@@ -77,6 +77,33 @@ Limits: `--margin-px` must exceed the largest organism radius, otherwise an orga
 tile is cut into pieces; outlines are not yet validated against the gold windows, and object counts
 are not design-based estimates (only cover in step 3 is).
 
+## 7. Detectors instead of a patch classifier (YOLO-seg / Grounding DINO)
+If only a few target organisms matter and sand, rock and seaweed are just "everything else", a
+detector can replace steps 3-4.  Its instances become a patch map (targets + `other`) that step 5
+uses unchanged, so cover is still estimated from the reference sample and the detector is judged by it.
+```bash
+# trained YOLO-seg weights
+python src/pipeline.py detect --raster Tuesday.tif --grid out/tuesday/grid.npz --backend yolo \
+  --weights best.pt --mm-per-px 0.412284 --origin X0 Y0 --device cuda --out out/tuesday/detect_r0
+# zero-shot cold start (no training data): text prompts, boxes refined to masks by SAM2
+python src/pipeline.py detect --raster Tuesday.tif --grid out/tuesday/grid.npz --backend grounded \
+  --prompt "Corynactis viridis=orange anemone" --sam2-config sam2.1_hiera_l.yaml \
+  --sam2-checkpoint sam2.1_hiera_large.pt --mm-per-px 0.412284 --origin X0 Y0 --out out/tuesday/detect_g0
+python src/pipeline.py estimate ... --predictions out/tuesday/detect_r0/patch_predictions.csv ...
+```
+Outputs: `instances.geojson` (outlines), `patch_predictions.csv`, `detect_report.json`.  Suggested path:
+zero-shot detections -> fix them by hand -> train YOLO-seg on the corrected masks -> `detect --backend yolo`.
+YOLO-seg needs mask annotations (the crop library has none); the backends are not exercised by the unit
+tests (they need torch and weights), only the shared post-processing is.
+
+## 8. GUI
+`python src/gui.py` (or `benthic-cover-gui.exe`).  *Run steps* shows a form per step (same options as the
+CLI; outputs of one step pre-fill the next).  *Label reference points* shows a 40 cm context view and an
+8 cm close-up around each reference point, one key per class (digits, then letters), Backspace = undo,
+Space = skip, Delete = unscorable; every answer is saved at once to `<points>_labelled.csv`, which is the
+`--reference` file for `estimate`.  It never shows model output (blind labelling).
+
 ## Status
 Unit and synthetic end-to-end tests pass (including a coverage simulation of the estimators).
-Not yet run on the real mosaics, with rasterio reading, or with the DINOv2 backbone.
+Not yet run on the real mosaics, with rasterio reading, or with the DINOv2, SAM2, YOLO-seg and Grounding DINO backends.
+The GUI window code is checked only by a headless-free `--selftest` on Windows CI; its logic is unit tested.
